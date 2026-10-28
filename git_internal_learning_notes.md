@@ -516,3 +516,91 @@ First, inspect the reflog:
 
 ```bash
 git reflog
+
+
+Inspect the candidate commit:
+
+```bash
+git show --stat <commit-hash>
+```
+
+Create a recovery branch:
+
+```bash
+git switch -c recovery-branch <commit-hash>
+```
+
+Replace `<commit-hash>` with the actual hash you want to recover.
+
+Creating a branch preserves a reference to that commit so you can inspect and recover the work.
+
+### 6.3 How Long Does the Reflog Keep Entries?
+
+Common default expiration settings are:
+
+| Configuration | Default | Meaning |
+|---|---|---|
+| `gc.reflogExpire` | 90 days | Expiration policy for reflog entries associated with reachable commits |
+| `gc.reflogExpireUnreachable` | 30 days | Expiration policy for entries associated with commits unreachable from the current reference tip |
+
+Check configured values:
+
+```bash
+git config --get gc.reflogExpire
+git config --get gc.reflogExpireUnreachable
+```
+
+If no value is printed, Git may be using its built-in default.
+
+These are expiration policies, not guaranteed deletion dates. Unreachable objects may remain in the object database after reflog entries expire, until they become eligible for pruning.
+
+### 6.4 Limitations of Reflog
+
+The reflog can help recover committed objects that still exist.
+
+It usually cannot restore uncommitted changes overwritten by `git reset --hard`, and it cannot recover objects that have already been pruned.
+
+If you accidentally lose a commit, inspect `git reflog` promptly and create a recovery branch before performing further cleanup operations.
+
+---
+
+## Quick Revision
+
+| Concept | Purpose |
+|---|---|
+| Working tree | Edit project files |
+| Staging area | Select changes for the next commit |
+| Repository (`.git`) | Store Git objects, references, and history |
+| Blob | Store file contents |
+| Tree | Record directory entries and object references |
+| Commit | Record a snapshot, parent reference(s), and metadata |
+| Annotated tag | Mark an object with tag metadata |
+| SHA-1 / SHA-256 | Identify objects using cryptographic hashes |
+| Branch | Movable reference to a commit |
+| HEAD | Identify the current checkout |
+| Detached HEAD | HEAD points directly to a commit |
+| ORIG_HEAD | Saved previous position for certain operations |
+| FETCH_HEAD | Records information about fetched references |
+| Packfile | Store objects efficiently together |
+| `git gc` | Maintain and optimize the repository |
+| `git fsck` | Check object integrity and connectivity |
+| Reflog | Record reference movements and help recover commits |
+
+## Commands to Practise
+
+```bash
+git status
+git add .
+git commit -m "message"
+git log --oneline -5
+git branch
+git branch --show-current
+git rev-parse --show-object-format
+git show --no-patch --pretty=raw HEAD
+git diff HEAD~1 HEAD
+git reflog
+git count-objects -vH
+git fsck --full
+```
+
+**Final takeaway:** Git combines snapshots, object references, and commit history to track your project. Understanding these internal concepts makes branching, debugging, and recovering lost commits much easier.
