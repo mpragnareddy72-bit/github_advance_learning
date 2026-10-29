@@ -1,0 +1,606 @@
+# Mobile App Production Git Branching Strategy
+
+## 1. Why do we need a branching strategy?
+
+In mobile app development, releasing a new version is different from deploying a website.
+
+For a website, we can often deploy a fix quickly. For a mobile app, users may need to download an update from the Play Store or App Store. Store reviews and user adoption can take time.
+
+A good branching strategy helps us:
+
+- Develop new features without breaking production.
+- Fix bugs in the version users already have.
+- Prepare stable releases.
+- Rebuild the exact source code used for a store submission.
+- Maintain compatibility between older mobile apps and newer backend APIs.
+
+---
+
+## 2. Important Git branches
+
+A typical mobile app repository may use these branches:
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable, production-ready code or the main integration branch, depending on team policy |
+| `develop` | Integrates upcoming features in a GitFlow workflow |
+| `feature/*` | Develops individual features |
+| `release/*` | Stabilizes a specific release |
+| `hotfix/*` | Fixes urgent production issues |
+
+Example branch names:
+
+```text
+main
+develop
+feature/product-search
+feature/payment-screen
+release/2.4.0
+hotfix/2.4.1
+```
+
+**Important:** Teams do not need every branch type. The appropriate strategy depends on team size, release frequency, and CI/CD practices.
+
+---
+
+## 3. GitFlow vs GitHub Flow vs Trunk-Based Development
+
+### A. GitFlow
+
+GitFlow uses separate branches for development, releases, and production fixes.
+
+Typical flow:
+
+```text
+main
+  |
+  |---- release/2.4.0
+  |
+develop
+  |
+  |---- feature/product-search
+  |
+  |---- feature/payment-screen
+```
+
+Workflow:
+
+1. Developers create feature branches from `develop`.
+2. Completed features merge into `develop`.
+3. When a release is ready, create `release/2.4.0`.
+4. Test and fix bugs on the release branch.
+5. Merge the release into `main` and tag it.
+6. Ensure release fixes also reach `develop`.
+7. For urgent production bugs, create a hotfix branch from the production tag.
+
+**Advantages**
+- Clear separation between development and release stabilization.
+- Useful when several features are being developed for a future release.
+- Supports dedicated release testing.
+
+**Disadvantages**
+- More branches and merge work.
+- Release fixes can be missed in the development branch if the team does not merge or cherry-pick them back.
+- May be unnecessarily complicated for teams that release frequently.
+
+### B. GitHub Flow
+
+GitHub Flow generally uses short-lived feature branches and pull requests into `main`.
+
+```text
+main
+  |
+  |---- feature/product-search
+  |           |
+  |           └── Pull request → main
+  |
+  |---- feature/payment-screen
+              |
+              └── Pull request → main
+```
+
+Workflow:
+
+1. Create a feature branch from the latest `main`.
+2. Make changes and test them.
+3. Open a pull request.
+4. Review and merge the changes.
+5. Release from a tested commit when appropriate.
+
+For mobile apps, merging into `main` does not have to mean immediately publishing to the stores. CI/CD, release approvals, and feature flags can control when changes become available.
+
+**Advantages**
+- Simple workflow.
+- Easier code review.
+- Fewer long-running branches.
+
+**Disadvantages**
+- Requires good automated testing and release controls.
+- Unfinished features must be isolated, disabled, or kept out of `main`.
+
+### C. Trunk-Based Development
+
+Developers integrate small changes into a shared main branch frequently, using short-lived branches or direct commits according to team policy.
+
+```text
+main
+  |
+  |-- small change
+  |-- small change
+  |-- small change
+  |
+  └── automated tests and controlled releases
+```
+
+**Advantages**
+- Reduces long-running branch divergence.
+- Encourages continuous integration.
+- Works well with strong automated testing and feature flags.
+
+**Disadvantages**
+- Requires reliable tests and disciplined integration.
+- Incomplete features must not accidentally become visible to users.
+
+### Which should a mobile team choose?
+
+- **GitFlow:** Useful when releases need dedicated stabilization periods and several versions may be maintained.
+- **GitHub Flow:** Useful for teams that integrate changes frequently and control releases separately.
+- **Trunk-Based Development:** Useful for teams with strong CI/CD, automated testing, and feature-flag practices.
+
+No strategy is automatically best for every mobile team.
+
+---
+
+## 4. Why do we create a release branch?
+
+Suppose ShopEasy version `2.4.0` is being tested for release.
+
+Meanwhile, developers have started implementing features for `2.5.0`.
+
+If the team tests and fixes everything on one shared branch, new feature changes may enter the release unexpectedly.
+
+Instead, create a release branch:
+
+```bash
+git switch develop
+git pull origin develop
+git switch -c release/2.4.0
+git push -u origin release/2.4.0
+```
+
+Now:
+
+- `release/2.4.0` is used to stabilize version 2.4.0.
+- `develop` continues receiving changes for future versions.
+- Only appropriate release fixes should be added to the release branch.
+
+After testing, merge the release into `main`, tag the release commit, and make sure any release fixes also reach `develop`.
+
+The exact merge process depends on the team's branch policy.
+
+---
+
+## 5. Production hotfix workflow
+
+### Scenario
+
+ShopEasy version `2.4.0` is already available in the app stores. A payment-screen crash affects users.
+
+The `main` or `develop` branch contains unfinished work for version `2.5.0`.
+
+We should not merge all unfinished future work into the production fix.
+
+### Step 1: Find the exact production tag
+
+```bash
+git fetch origin --tags
+git tag
+```
+
+Assume the production version has the tag:
+
+```text
+v2.4.0
+```
+
+### Step 2: Create a hotfix branch from the production tag
+
+```bash
+git switch -c hotfix/2.4.1 v2.4.0
+```
+
+This starts the hotfix from the exact tagged production source, rather than from a branch containing unfinished future features.
+
+### Step 3: Fix and test the bug
+
+```bash
+git add .
+git commit -m "fix: resolve payment screen crash"
+```
+
+Run the relevant tests and build the app.
+
+### Step 4: Prepare the patch release
+
+Merge the tested hotfix into the branch used to prepare the production patch release, or follow the team's approved release process.
+
+The hotfix release must include only the intended, tested changes.
+
+### Step 5: Ensure future development receives the fix
+
+If the fix is not already present in `main` or `develop`, cherry-pick it:
+
+```bash
+git switch main
+git pull origin main
+git cherry-pick <fix-commit-hash>
+```
+
+Replace `<fix-commit-hash>` with the actual commit hash.
+
+Cherry-pick applies the selected commit's changes to the current branch and normally creates a new commit with a different commit ID.
+
+If the team uses `develop` for future work, ensure the fix reaches `develop` too.
+
+**Important:** Cherry-picking does not guarantee that the fix will apply without conflicts. Review the result and run tests.
+
+---
+
+## 6. Merge vs cherry-pick
+
+### Merge
+
+Use merge when you want to bring a branch's history and changes into another branch.
+
+```bash
+git switch main
+git merge release/2.4.0
+```
+
+This is appropriate when the target branch should receive the release branch's intended changes.
+
+### Cherry-pick
+
+Use cherry-pick when you need a particular commit without merging the entire source branch.
+
+```bash
+git switch main
+git cherry-pick <commit-hash>
+```
+
+Example:
+
+- `hotfix/2.4.1` contains a production crash fix.
+- `develop` contains many unfinished features.
+- Cherry-picking can bring the fix into `develop` without merging all the unfinished work from another branch.
+
+**Remember:** Use merge for a related set of branch changes; use cherry-pick for a specific commit when selective application is appropriate.
+
+---
+
+## 7. Semantic version vs build number
+
+Mobile apps commonly use two different version identifiers.
+
+### Semantic app version
+
+Example:
+
+```text
+2.4.1
+```
+
+The version generally follows:
+
+```text
+MAJOR.MINOR.PATCH
+```
+
+- **MAJOR:** Incompatible or major changes, according to the project's versioning policy.
+- **MINOR:** New functionality that is intended to remain backward-compatible.
+- **PATCH:** Bug fixes that do not introduce new functionality.
+
+These conventions are useful, but a team should define its own release policy.
+
+### Build number
+
+The build number identifies an individual build or store submission sequence. It generally needs to increase monotonically for a given app/store distribution track or platform requirement.
+
+Example:
+
+| App version | Build number | Meaning |
+|---|---:|---|
+| `2.4.0` | 106 | First build in this example |
+| `2.4.1` | 107 | Patch release build |
+| `2.4.1` | 108 | Another build of the same app version |
+| `2.4.1` | 109 | Resubmission after a fix |
+
+The exact store rules differ by platform. Android's `versionCode` must increase for new releases. Apple's build-number rules also apply to uploads and version trains.
+
+### Flutter example
+
+In `pubspec.yaml`:
+
+```yaml
+version: 2.4.1+109
+```
+
+Here:
+
+- `2.4.1` is the user-facing version.
+- `109` is the build number.
+
+Flutter maps these values to the relevant platform version fields, subject to platform-specific configuration.
+
+**Important:** A rejected build may need a new build number even if the user-facing app version remains unchanged.
+
+---
+
+## 8. Why tag every store submission?
+
+A Git tag identifies a specific commit. It helps the team find the exact source code used for a release or submission.
+
+Example tags:
+
+```text
+v2.4.0
+v2.4.1
+v2.5.0
+```
+
+Create an annotated tag:
+
+```bash
+git tag -a v2.4.1 -m "ShopEasy 2.4.1 store submission"
+git push origin v2.4.1
+```
+
+Before creating the tag, verify that `HEAD` is the exact commit used to build the submission.
+
+### Why tagging matters
+
+Suppose a bug appears after version `2.4.1` is published.
+
+With the correct tag, the team can identify the source commit used for that release, inspect its history, and rebuild it using the appropriate build environment and dependencies.
+
+### Recommended practice
+
+- Tag each release or store submission with a unique, consistent tag.
+- Record the app version and build number.
+- Keep CI build artifacts and build metadata when possible.
+- Record the commit SHA used for the submission.
+- If a submission is rejected and a new build is produced, create a new submission identifier or tag according to the team's naming policy.
+
+A Git tag alone does not guarantee a byte-for-byte identical binary. Reproducible builds also depend on dependencies, build tools, environment settings, signing, and other inputs.
+
+---
+
+## 9. Feature flags and remote config
+
+A feature flag controls whether a feature is enabled, without necessarily requiring a new app release to change its availability.
+
+### Example
+
+ShopEasy version `2.5.0` includes a redesigned checkout screen, but the team is not ready to enable it for everyone.
+
+A remote configuration might contain:
+
+```json
+{
+  "new_checkout_enabled": false
+}
+```
+
+The app checks this setting and uses the old checkout flow while the new one remains disabled.
+
+Later, the team enables the feature for a small percentage of users, tests the results, and gradually expands availability.
+
+### Why feature flags help
+
+- Release app code while keeping a feature disabled.
+- Enable a feature for selected users or a percentage of users.
+- Disable a problematic feature remotely, when the app has a safe fallback.
+- Roll out functionality gradually.
+
+### Important limitations
+
+- A feature flag cannot add code that is absent from an installed app.
+- Remote config is not a substitute for authorization or security checks.
+- The app should handle network failures and stale configuration safely.
+- Critical flows should have a tested fallback.
+- Remove old flags when they are no longer needed.
+
+**Deploying code and releasing a feature are different things.** A team can deploy code in an app build while controlling feature availability separately.
+
+---
+
+## 10. Backend API backward compatibility
+
+A mobile app may remain installed on a user's phone long after a new app version is released.
+
+For example:
+
+- ShopEasy `2.3.0` is still installed on some phones.
+- ShopEasy `2.4.0` has already been released.
+- The backend team wants to add a new field to the product API.
+
+The backend must consider both old and new clients.
+
+### Safer API change
+
+Suppose the existing response is:
+
+```json
+{
+  "id": "P101",
+  "name": "Aloe Vera Gel"
+}
+```
+
+The backend adds an optional field:
+
+```json
+{
+  "id": "P101",
+  "name": "Aloe Vera Gel",
+  "discount_percentage": 10
+}
+```
+
+Usually, adding an optional response field is backward-compatible if existing clients ignore unknown fields. However, client decoding rules and validation behavior must be checked.
+
+### Riskier API change
+
+The backend renames `name` to `product_name` and stops returning `name`.
+
+Older apps that require `name` may fail.
+
+### Safer rollout approach
+
+1. Add the new field while retaining the old field.
+2. Update the mobile app to use the new field.
+3. Monitor adoption and API usage.
+4. Deprecate the old field only when the team has sufficient evidence that supported clients no longer depend on it.
+5. Use a new API version when a breaking change cannot be handled compatibly.
+
+Example versioned endpoints:
+
+```text
+/api/v1/products
+/api/v2/products
+```
+
+Not every API change requires a new version. Additive, backward-compatible changes can often remain within the existing version.
+
+### API compatibility checklist
+
+- Will older app versions continue to work?
+- Are required response fields still present?
+- Are field types and meanings unchanged?
+- Are authentication and authorization behaviors compatible?
+- Does the backend tolerate older request formats?
+- Is there a migration and deprecation plan for breaking changes?
+
+---
+
+## 11. How mobile releases and backend releases work together
+
+Consider this example:
+
+- Mobile app `2.4.0` calls backend API v1.
+- Mobile app `2.5.0` introduces a new checkout feature.
+- The backend is updated to support the new feature.
+
+A safer rollout could be:
+
+1. Deploy a backward-compatible backend change.
+2. Verify that existing app versions still work.
+3. Release the mobile app with the new checkout feature disabled.
+4. Test the new app and backend together.
+5. Enable the feature gradually using remote config.
+6. Monitor errors and usage.
+7. Roll back the feature flag if problems appear.
+
+This approach reduces the risk of releasing a mobile app that depends on backend functionality that is not yet available.
+
+**Never assume all users update their mobile apps immediately.**
+
+---
+
+## 12. Example end-to-end release workflow
+
+For ShopEasy version `2.4.1`:
+
+1. Start from the correct production or development branch according to the team's strategy.
+2. Create `release/2.4.1` if using release branches.
+3. Stabilize the release and run tests.
+4. Fix production issues in the appropriate branch.
+5. Ensure fixes reach future development branches.
+6. Set the app version to `2.4.1`.
+7. Assign a valid, increasing build number.
+8. Build and test the exact candidate binary.
+9. Record the commit SHA, app version, build number, and build artifacts.
+10. Create and push an annotated Git tag for the exact submitted commit.
+11. Submit the build to the app store.
+12. If a new submission is required, increment the build number and record the new candidate.
+13. Monitor crashes, API errors, and user feedback after release.
+14. Use feature flags or a hotfix release when appropriate.
+15. Maintain backend compatibility with older supported app versions.
+
+---
+
+## 13. Quick reference
+
+| Situation | Recommended approach |
+|---|---|
+| Developing an isolated feature | Create a feature branch |
+| Stabilizing a specific release | Use a release branch if the workflow calls for one |
+| Fixing a bug in a live app | Start from the relevant production tag or release branch |
+| Applying one fix to another branch | Consider cherry-pick |
+| Integrating related branch changes | Merge |
+| Resubmitting a corrected build | Increase the build number as required by the platform |
+| Identifying submitted source code | Tag the exact submitted commit and record its SHA |
+| Gradually enabling a feature | Use feature flags or remote config |
+| Adding API functionality | Prefer backward-compatible changes |
+| Making a breaking API change | Plan versioning, migration, and deprecation |
+
+---
+
+## 14. Practice scenarios
+
+Try answering these before checking your understanding.
+
+### Scenario 1: Hotfix
+
+Version `2.4.0` is live. The `develop` branch contains unfinished `2.5.0` features. You need to fix a crash in production.
+
+- From which commit or branch should you start the hotfix?
+- How will you ensure the fix reaches future development?
+- Why might cherry-pick be safer than merging all of `develop`?
+
+### Scenario 2: Build number
+
+The app version is `2.4.1` and build number `108` was rejected. You fix a bug and need to resubmit the same intended release.
+
+- Must the user-facing version change?
+- What should happen to the build number?
+- Why is changing a Git branch name not sufficient?
+
+### Scenario 3: Git tag
+
+The team submitted build `109`, but no one recorded which commit was used.
+
+- Why is that a release-management problem?
+- What should the team record for future submissions?
+- Why might a tag alone not guarantee an identical binary?
+
+### Scenario 4: Feature flags
+
+The new checkout code is included in the app, but the team is not ready to enable it for all users.
+
+- How can the team control feature availability?
+- What happens if the installed app does not contain the feature code?
+- What fallback should be available if remote config cannot be loaded?
+
+### Scenario 5: API compatibility
+
+A new backend release renames a required JSON field and removes the old field. Many users still have an older app installed.
+
+- Why might the old apps fail?
+- How could the backend introduce the change more safely?
+- When might a new API version be necessary?
+
+---
+
+## 15. Final principles to remember
+
+1. Keep production fixes isolated from unfinished features.
+2. Ensure hotfixes reach every branch that needs them.
+3. Distinguish the user-facing app version from the build number.
+4. Tag the exact commit used for every store submission.
+5. Record commit SHAs and build artifacts for traceability.
+6. Use feature flags for controlled availability, not as a replacement for security.
+7. Keep backend APIs compatible with older supported app versions.
+8. Test the app, backend, and release configuration together.
+9. Define the team's branch and release policies clearly.
+10. Prefer a workflow the team can follow consistently over unnecessary branching complexity.
